@@ -1,0 +1,76 @@
+---
+- name: Deploy Spark
+  hosts: localhost
+  connection: local
+  gather_facts: False
+
+  vars:
+    spark_version: "spark-2.0.2-bin-hadoop2.7"
+    spark_mirror: "http://d3kbcqa49mib13.cloudfront.net"
+    spark_tmp_dir: /tmp
+    spark_install_dir: /opt/spark
+    spark_master_fqdn: "{{ lookup('file', '/tmp/spark_master_fqdn') }}"
+    spark_master_port: 7077
+    spark_user: spark
+    spark_group: spark
+
+  tasks:
+    - name: update all packages
+      apt:
+        upgrade: dist
+      become: true
+
+    - name: install openjdk-8-jre
+      apt:
+        name: openjdk-8-jre
+        update_cache: yes
+      become: true
+
+    - name: create group
+      group:
+        name: "{{ spark_group }}"
+        state: present
+      become: true
+
+    - name: create user
+      user:
+        name: "{{ spark_user }}"
+        group: "{{ spark_group }}"
+      become: true
+
+    - name: create install directory
+      file:
+        path: "{{ spark_install_dir }}"
+        state: directory
+        owner: "{{ spark_user }}"
+        group: "{{ spark_group }}"
+      become: true
+
+    - name: Download Spark distribution
+      get_url:
+        url: "{{ spark_mirror }}/{{ spark_version }}.tgz"
+        dest: "{{ spark_tmp_dir }}"
+      become: true
+      become_user: "{{ spark_user }}"
+
+    - name: Extract Spark distribution
+      unarchive:
+        src: "{{ spark_tmp_dir }}/{{ spark_version }}.tgz"
+        dest: "{{ spark_install_dir }}"
+        copy: no
+        owner: "{{ spark_user }}"
+        group: "{{ spark_group }}"
+      become: true
+
+    - name: Create link for spark_install_dir
+      file:
+        src: "{{ spark_install_dir }}/{{ spark_version }}"
+        dest: "{{ spark_install_dir }}/spark"
+        state: link
+      become: true
+      become_user: "{{ spark_user }}"
+
+    - name: Start Spark as Slave
+      command: "{{ spark_install_dir }}/{{ spark_version }}/sbin/start-slave.sh spark://{{ spark_master_fqdn }}:{{ spark_master_port }}"
+      become: true
+      become_user: "{{ spark_user }}"
